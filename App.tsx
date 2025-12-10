@@ -33,6 +33,26 @@ const App: React.FC = () => {
   // UI State
   const [shareBtnText, setShareBtnText] = useState("Share");
 
+  // Load level from Hash URL on mount (Deep Linking)
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (hash.startsWith('#level=')) {
+      const lvlNum = parseInt(hash.split('=')[1]);
+      if (!isNaN(lvlNum) && lvlNum >= 1 && lvlNum <= INITIAL_LEVELS.length) {
+        // Unlock previous levels implicitly for shared link access (or just jump to it)
+        const idx = lvlNum - 1;
+        // Basic check to ensure we don't crash if index is out of sync with state
+        if (INITIAL_LEVELS[idx]) {
+          setCurrentLevelIdx(idx);
+          setCurrentLevel(INITIAL_LEVELS[idx]);
+          
+          // Optional: Add previous badges so the UI doesn't look weirdly locked? 
+          // For now we just allow playing the specific level.
+        }
+      }
+    }
+  }, []);
+
   // Initialize Level
   useEffect(() => {
     resetLevelState();
@@ -260,18 +280,23 @@ const App: React.FC = () => {
   };
 
   const handleShare = async () => {
+    // Concept 1: Deep Linking - Share the specific level
+    const levelHash = `#level=${currentLevelIdx + 1}`;
+    const cleanUrl = window.location.href.split('#')[0];
+    const shareUrl = `${cleanUrl}${levelHash}`;
+
     const shareData = {
       title: 'Qbo Academy',
-      text: 'Check out this 3D coding game! Can you solve the puzzles?',
-      url: window.location.href
+      text: `Can you solve ${currentLevel.name} in Qbo Academy?`,
+      url: shareUrl
     };
 
     try {
       if (navigator.share && /mobile|android|iphone/i.test(navigator.userAgent)) {
         await navigator.share(shareData);
       } else {
-        await navigator.clipboard.writeText(window.location.href);
-        setShareBtnText("Copied!");
+        await navigator.clipboard.writeText(shareUrl);
+        setShareBtnText("Link Copied!");
         setTimeout(() => setShareBtnText("Share"), 2000);
       }
     } catch (err) {
@@ -310,6 +335,8 @@ const App: React.FC = () => {
                    setCurrentLevelIdx(idx);
                    setCurrentLevel(levels[idx]);
                    setCode([]);
+                   // Update Hash manually if user clicks nav
+                   window.location.hash = `level=${idx + 1}`;
                  }}
                  className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all relative
                    ${currentLevelIdx === idx ? 'bg-c4k-blue-500 text-white scale-110 shadow-lg' : 
@@ -328,7 +355,7 @@ const App: React.FC = () => {
           <button 
             onClick={handleShare}
             className="flex items-center gap-2 px-4 py-2 text-c4k-slate-600 bg-c4k-slate-100 hover:bg-c4k-slate-200 rounded-lg font-bold transition-colors"
-            title="Share Game"
+            title="Share Level Link"
           >
             <Share2 size={18} />
             <span className="hidden sm:inline">{shareBtnText}</span>
@@ -421,11 +448,13 @@ const App: React.FC = () => {
                         setCurrentLevelIdx(0);
                         setCurrentLevel(levels[0]);
                         setCode([]);
+                        window.location.hash = 'level=1';
                       } else {
                         const next = currentLevelIdx + 1;
                         setCurrentLevelIdx(next);
                         setCurrentLevel(levels[next]);
                         setCode([]);
+                        window.location.hash = `level=${next + 1}`;
                       }
                     }}
                     className="px-8 py-3 bg-c4k-secondary-green text-white rounded-xl font-bold text-lg hover:bg-green-600 transition-colors flex items-center gap-2 mx-auto"
