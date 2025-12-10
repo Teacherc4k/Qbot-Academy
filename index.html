@@ -4,8 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>C4K Cubebot 3D</title>
-
-    <!-- Tailwind for simple layout and text -->
+    <!-- We keep Tailwind CDN for simplicity to avoid setting up PostCSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
@@ -21,7 +20,7 @@
                   400: '#2563eb',
                   500: '#1d4ed8',
                   600: '#1e40af',
-                  700: '#1e3a8a'
+                  700: '#1e3a8a',
                 },
                 slate: {
                   50: '#f8fafc',
@@ -31,24 +30,30 @@
                   400: '#94a3b8',
                   500: '#64748b',
                   600: '#475569',
-                  700: '#334155'
+                  700: '#334155',
+                },
+                secondary: {
+                  red: '#dc2626',
+                  orange: '#f97316',
+                  yellow: '#facc15',
+                  green: '#84cc16',
+                  cyan: '#06b6d4',
+                  purple: '#a855f7',
+                  pink: '#ec4899',
                 }
               }
             }
           }
         }
-      };
-    </script>
-
-    <style>
-      body {
-        margin: 0;
-        overflow: hidden;
-        background-color: #f8fafc;
-        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
-          "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
       }
-
+    </script>
+    <style>
+      body { margin: 0; overflow: hidden; background-color: #f8fafc; }
+      ::-webkit-scrollbar { width: 8px; }
+      ::-webkit-scrollbar-track { background: #f1f5f9; }
+      ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+      ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+      
       /* Loading Spinner styles */
       #loading-container {
         display: flex;
@@ -57,6 +62,7 @@
         justify-content: center;
         height: 100vh;
         color: #64748b;
+        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
       }
       .spinner {
         width: 40px;
@@ -68,206 +74,35 @@
         margin-bottom: 16px;
       }
       @keyframes spin {
-        0% {
-          transform: rotate(0deg);
-        }
-        100% {
-          transform: rotate(360deg);
-        }
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
       }
     </style>
-
-    <!-- Three.js from CDN : gives us global THREE object -->
-    <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
-  </head>
-
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^19.2.1",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.1/",
+    "react/": "https://esm.sh/react@^19.2.1/",
+    "@google/genai": "https://esm.sh/@google/genai@^1.32.0",
+    "@react-three/fiber": "https://esm.sh/@react-three/fiber@^9.4.2",
+    "three": "https://esm.sh/three@^0.181.2",
+    "@react-three/drei": "https://esm.sh/@react-three/drei@^10.7.7",
+    "lucide-react": "https://esm.sh/lucide-react@^0.559.0",
+    "vite": "https://esm.sh/vite@^7.2.7",
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2"
+  }
+}
+</script>
+</head>
   <body>
-    <!-- UI overlay -->
-    <div
-      class="absolute top-0 left-0 right-0 z-10 flex items-center justify-between px-4 py-2 bg-white/80 backdrop-blur border-b border-c4k-slate-200"
-    >
-      <div class="flex items-center gap-2">
-        <div
-          class="w-8 h-8 rounded-lg bg-c4k-blue-500 flex items-center justify-center text-white font-semibold"
-        >
-          Q
-        </div>
-        <div>
-          <div class="text-sm font-semibold text-c4k-slate-700">
-            Qbo Academy : Cubebot Park
-          </div>
-          <div class="text-xs text-c4k-slate-500">
-            Use arrow keys : rotate the view
-          </div>
-        </div>
-      </div>
-      <div class="text-xs text-c4k-slate-500">
-        Code4Kids demo - GitHub Pages friendly
+    <div id="root">
+      <div id="loading-container">
+        <div class="spinner"></div>
+        <p>Loading Qbo Academy...</p>
       </div>
     </div>
-
-    <!-- Loading state (hidden once scene starts) -->
-    <div id="loading-container">
-      <div class="spinner"></div>
-      <p>Loading Qbo Academy...</p>
-    </div>
-
-    <!-- Where the 3D canvas will live -->
-    <div id="game-container"></div>
-
-    <!-- Plain JavaScript : no importmap, no TSX -->
-    <script>
-      // Wait for page to be ready
-      window.addEventListener("load", function () {
-        const loading = document.getElementById("loading-container");
-        const container = document.getElementById("game-container");
-        loading.style.display = "none";
-
-        // Scene
-        const scene = new THREE.Scene();
-        scene.background = new THREE.Color("#dbeafe"); // light C4K blue
-
-        // Camera
-        const camera = new THREE.PerspectiveCamera(
-          60,
-          window.innerWidth / window.innerHeight,
-          0.1,
-          1000
-        );
-        camera.position.set(6, 5, 8);
-
-        // Renderer
-        const renderer = new THREE.WebGLRenderer({ antialias: true });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(window.devicePixelRatio);
-        container.appendChild(renderer.domElement);
-
-        // Lights
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-        scene.add(ambientLight);
-
-        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-        dirLight.position.set(5, 10, 7);
-        scene.add(dirLight);
-
-        // Ground
-        const groundGeo = new THREE.PlaneGeometry(40, 40);
-        const groundMat = new THREE.MeshStandardMaterial({
-          color: "#bbf7d0" // soft green
-        });
-        const ground = new THREE.Mesh(groundGeo, groundMat);
-        ground.rotation.x = -Math.PI / 2;
-        ground.position.y = -0.5;
-        scene.add(ground);
-
-        // Simple Cubebot
-        const cubebot = new THREE.Group();
-
-        // Body
-        const bodyGeo = new THREE.BoxGeometry(1.6, 1.6, 1.6);
-        const bodyMat = new THREE.MeshStandardMaterial({
-          color: "#1d4ed8"
-        });
-        const body = new THREE.Mesh(bodyGeo, bodyMat);
-        body.position.y = 1.2;
-        cubebot.add(body);
-
-        // Head
-        const headGeo = new THREE.BoxGeometry(1.2, 1.2, 1.2);
-        const headMat = new THREE.MeshStandardMaterial({
-          color: "#3b82f6"
-        });
-        const head = new THREE.Mesh(headGeo, headMat);
-        head.position.y = 2.4;
-        cubebot.add(head);
-
-        // Eyes
-        const eyeGeo = new THREE.BoxGeometry(0.2, 0.2, 0.1);
-        const eyeMat = new THREE.MeshStandardMaterial({ color: "#facc15" });
-        const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
-        const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
-        leftEye.position.set(-0.3, 2.55, 0.65);
-        rightEye.position.set(0.3, 2.55, 0.65);
-        cubebot.add(leftEye);
-        cubebot.add(rightEye);
-
-        // Feet
-        const footGeo = new THREE.BoxGeometry(0.5, 0.3, 0.8);
-        const footMat = new THREE.MeshStandardMaterial({ color: "#1e293b" });
-        const leftFoot = new THREE.Mesh(footGeo, footMat);
-        const rightFoot = new THREE.Mesh(footGeo, footMat);
-        leftFoot.position.set(-0.4, 0.1, 0);
-        rightFoot.position.set(0.4, 0.1, 0);
-        cubebot.add(leftFoot);
-        cubebot.add(rightFoot);
-
-        scene.add(cubebot);
-
-        // Simple park objects
-        function createTree(x, z) {
-          const trunkGeo = new THREE.CylinderGeometry(0.1, 0.15, 1.2, 8);
-          const trunkMat = new THREE.MeshStandardMaterial({
-            color: "#78350f"
-          });
-          const trunk = new THREE.Mesh(trunkGeo, trunkMat);
-          trunk.position.set(x, 0.6, z);
-
-          const leavesGeo = new THREE.SphereGeometry(0.7, 16, 16);
-          const leavesMat = new THREE.MeshStandardMaterial({
-            color: "#22c55e"
-          });
-          const leaves = new THREE.Mesh(leavesGeo, leavesMat);
-          leaves.position.set(x, 1.6, z);
-
-          scene.add(trunk);
-          scene.add(leaves);
-        }
-
-        createTree(3, -2);
-        createTree(-4, 1);
-        createTree(2, 4);
-
-        // Camera control with arrow keys
-        let angle = 0;
-        const radius = 10;
-
-        function updateCameraPosition() {
-          camera.position.x = Math.cos(angle) * radius;
-          camera.position.z = Math.sin(angle) * radius;
-          camera.lookAt(cubebot.position);
-        }
-
-        window.addEventListener("keydown", function (event) {
-          if (event.key === "ArrowLeft") {
-            angle -= 0.1;
-            updateCameraPosition();
-          } else if (event.key === "ArrowRight") {
-            angle += 0.1;
-            updateCameraPosition();
-          }
-        });
-
-        // Resize handler
-        window.addEventListener("resize", function () {
-          camera.aspect = window.innerWidth / window.innerHeight;
-          camera.updateProjectionMatrix();
-          renderer.setSize(window.innerWidth, window.innerHeight);
-        });
-
-        // Animation loop
-        function animate() {
-          requestAnimationFrame(animate);
-
-          // Gentle idle animation for Cubebot
-          cubebot.rotation.y += 0.003;
-          cubebot.position.y = 0.1 + Math.sin(Date.now() * 0.002) * 0.05;
-
-          renderer.render(scene, camera);
-        }
-
-        updateCameraPosition();
-        animate();
-      });
-    </script>
+    <!-- Entry point for Vite - Must be relative (./) for GitHub Pages to find it in subfolders -->
+    <script type="module" src="./index.tsx"></script>
   </body>
 </html>
