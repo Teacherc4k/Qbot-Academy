@@ -11,6 +11,7 @@ export default defineConfig({
   },
   define: {
     // This allows process.env.API_KEY to work in the browser code
-    'process.env.API_KEY': JSON.stringify(process.env.API_KEY)
+    // Added fallback to empty string to prevent build errors if env var is missing
+    'process.env.API_KEY': JSON.stringify(process.env.API_KEY || '')
   }
 })
