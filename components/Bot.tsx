@@ -1,8 +1,22 @@
-import React, { useRef, useState, useLayoutEffect } from 'react';
+import React, { useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Group, MathUtils } from 'three';
 import { GridPos, Direction } from '../types';
 import { CELL_SIZE, COLORS } from '../constants';
+
+// Fix for Missing JSX Intrinsic Elements in TypeScript
+declare global {
+  namespace JSX {
+    interface IntrinsicElements {
+      group: any;
+      mesh: any;
+      boxGeometry: any;
+      meshStandardMaterial: any;
+      planeGeometry: any;
+      meshBasicMaterial: any;
+    }
+  }
+}
 
 interface BotProps {
   pos: GridPos;

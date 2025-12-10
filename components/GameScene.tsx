@@ -6,6 +6,24 @@ import { LevelData, GridPos, Direction } from '../types';
 import { CELL_SIZE, COLORS } from '../constants';
 import Bot from './Bot';
 
+// Fix for Missing JSX Intrinsic Elements in TypeScript
+declare global {
+  namespace JSX {
+    interface IntrinsicElements {
+      group: any;
+      mesh: any;
+      cylinderGeometry: any;
+      meshStandardMaterial: any;
+      pointLight: any;
+      boxGeometry: any;
+      ambientLight: any;
+      directionalLight: any;
+      color: any;
+      planeGeometry: any;
+    }
+  }
+}
+
 interface GameSceneProps {
   level: LevelData;
   botPos: GridPos;
