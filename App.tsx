@@ -1,10 +1,65 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Sparkles, Brain, LayoutGrid, ChevronRight, Download, GraduationCap, AlertTriangle, Award, RefreshCw, Shield, Lock, Share2 } from 'lucide-react';
+import { Sparkles, Brain, LayoutGrid, ChevronRight, Download, GraduationCap, AlertTriangle, Award, RefreshCw, Shield, Lock, Share2, Copy, X, ExternalLink } from 'lucide-react';
 import GameScene from './components/GameScene';
 import BlockEditor from './components/BlockEditor';
 import { INITIAL_LEVELS, ANIMATION_SPEED } from './constants';
 import { LevelData, GridPos, Direction, CodeBlock, BlockType, GameStatus } from './types';
 import { generateLevel } from './services/geminiService';
+
+// Fix for Missing JSX Intrinsic Elements in TypeScript
+declare global {
+  namespace JSX {
+    interface IntrinsicElements {
+      div: any;
+      header: any;
+      h1: any;
+      h2: any;
+      h3: any;
+      p: any;
+      span: any;
+      button: any;
+      img: any;
+      label: any;
+      textarea: any;
+      svg: any;
+      polyline: any;
+      input: any;
+      strong: any;
+      path: any;
+      rect: any;
+      text: any;
+      tspan: any;
+      g: any;
+    }
+  }
+}
+
+// Robust Unicode Base64 Encoding/Decoding
+const encodeLevel = (level: LevelData) => {
+  try {
+    const json = JSON.stringify(level);
+    const text = new TextEncoder().encode(json);
+    const binString = Array.from(text, (byte) => String.fromCodePoint(byte)).join("");
+    return btoa(binString);
+  } catch (e) {
+    console.error("Encoding failed", e);
+    return "";
+  }
+};
+
+const decodeLevel = (encoded: string): LevelData | null => {
+  try {
+    // Handle URL encoded chars if present
+    const cleanEncoded = decodeURIComponent(encoded);
+    const binString = atob(cleanEncoded);
+    const bytes = Uint8Array.from(binString, (m) => m.codePointAt(0)!);
+    const json = new TextDecoder().decode(bytes);
+    return JSON.parse(json);
+  } catch (e) {
+    console.error("Decoding failed", e);
+    return null;
+  }
+};
 
 const App: React.FC = () => {
   // Game State
@@ -30,30 +85,52 @@ const App: React.FC = () => {
   const [showAiModal, setShowAiModal] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
 
-  // UI State
-  const [shareBtnText, setShareBtnText] = useState("Share");
+  // Sharing State
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [generatedLink, setGeneratedLink] = useState("");
+  const [copyFeedback, setCopyFeedback] = useState("Copy Link");
 
-  // Load level from Hash URL on mount (Deep Linking)
+  // Load level from URL on mount
   useEffect(() => {
-    const hash = window.location.hash;
-    if (hash.startsWith('#level=')) {
-      const lvlNum = parseInt(hash.split('=')[1]);
-      if (!isNaN(lvlNum) && lvlNum >= 1 && lvlNum <= INITIAL_LEVELS.length) {
-        // Unlock previous levels implicitly for shared link access (or just jump to it)
-        const idx = lvlNum - 1;
-        // Basic check to ensure we don't crash if index is out of sync with state
-        if (INITIAL_LEVELS[idx]) {
+    const handleHashChange = () => {
+      const hash = window.location.hash;
+
+      // 1. Custom Level (#c=...)
+      if (hash.startsWith('#c=')) {
+        const encodedData = hash.substring(3);
+        const customLevel = decodeLevel(encodedData);
+        if (customLevel) {
+          setLevels(prev => {
+            // Avoid duplicates
+            if (prev.find(l => l.id === customLevel.id)) return prev;
+            return [...prev, customLevel];
+          });
+          setCurrentLevel(customLevel);
+          // We can't easily know the index in 'levels' state during mount, 
+          // so we set it to INITIAL_LEVELS length as a safe bet for "new" content
+          setCurrentLevelIdx(INITIAL_LEVELS.length); 
+        }
+      } 
+      // 2. Standard Level (#level=X)
+      else if (hash.startsWith('#level=')) {
+        const lvlNum = parseInt(hash.split('=')[1]);
+        if (!isNaN(lvlNum) && lvlNum >= 1 && lvlNum <= INITIAL_LEVELS.length) {
+          const idx = lvlNum - 1;
           setCurrentLevelIdx(idx);
           setCurrentLevel(INITIAL_LEVELS[idx]);
-          
-          // Optional: Add previous badges so the UI doesn't look weirdly locked? 
-          // For now we just allow playing the specific level.
         }
       }
-    }
+    };
+
+    // Run on mount
+    handleHashChange();
+
+    // Listen for hash changes
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
-  // Initialize Level
+  // Initialize Level State when level changes
   useEffect(() => {
     resetLevelState();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -228,7 +305,7 @@ const App: React.FC = () => {
     try {
       const newLevel = await generateLevel(aiPrompt);
       if (newLevel) {
-        setLevels([...levels, newLevel]);
+        setLevels(prev => [...prev, newLevel]);
         setCurrentLevelIdx(levels.length); // Index of the new one
         setCurrentLevel(newLevel);
         setShowAiModal(false);
@@ -279,33 +356,40 @@ const App: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
-  const handleShare = async () => {
-    // Concept 1: Deep Linking - Share the specific level
-    const levelHash = `#level=${currentLevelIdx + 1}`;
-    const cleanUrl = window.location.href.split('#')[0];
-    const shareUrl = `${cleanUrl}${levelHash}`;
+  const handleShare = () => {
+    // Construct base URL without hash or query params
+    const baseUrl = window.location.origin + window.location.pathname;
+    let shareUrl = "";
 
-    const shareData = {
-      title: 'Qbo Academy',
-      text: `Can you solve ${currentLevel.name} in Qbo Academy?`,
-      url: shareUrl
-    };
+    // Check if it's a generated/custom level
+    if (typeof currentLevel.id === 'string' && currentLevel.id.startsWith('gen-')) {
+       const encodedData = encodeLevel(currentLevel);
+       // Use hash #c= for custom levels to avoid sending huge data to server (431 error)
+       shareUrl = `${baseUrl}#c=${encodeURIComponent(encodedData)}`;
+    } else {
+       // Standard level
+       shareUrl = `${baseUrl}#level=${currentLevelIdx + 1}`;
+    }
 
+    setGeneratedLink(shareUrl);
+    setCopyFeedback("Copy Link");
+    setShowShareModal(true);
+  };
+
+  const copyToClipboard = async () => {
     try {
-      if (navigator.share && /mobile|android|iphone/i.test(navigator.userAgent)) {
-        await navigator.share(shareData);
-      } else {
-        await navigator.clipboard.writeText(shareUrl);
-        setShareBtnText("Link Copied!");
-        setTimeout(() => setShareBtnText("Share"), 2000);
-      }
+      await navigator.clipboard.writeText(generatedLink);
+      setCopyFeedback("Copied!");
+      setTimeout(() => setCopyFeedback("Copy Link"), 2000);
     } catch (err) {
-      console.error('Error sharing:', err);
+      console.error('Failed to copy', err);
+      setCopyFeedback("Failed");
     }
   };
 
   const isLastLevel = currentLevelIdx === levels.length - 1;
   const isOrientationComplete = earnedBadges.includes(6); // Assuming Level 6 ID is 6
+  const isLocalhost = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
 
   return (
     <div className="h-screen flex flex-col font-sans text-c4k-slate-700 bg-c4k-slate-50">
@@ -322,8 +406,13 @@ const App: React.FC = () => {
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2 mr-4">
             {levels.map((lvl, idx) => {
+               // Logic: Standard levels lock. Generated levels are just append to end and don't affect locking.
+               const isStandard = typeof lvl.id === 'number';
+               
                // Locking Logic: Level 0 is always open. Level N is open if N-1 is in earnedBadges.
-               const isLocked = idx > 0 && !earnedBadges.includes(levels[idx - 1].id);
+               // We only lock standard levels for now.
+               const isLocked = isStandard && idx > 0 && idx < INITIAL_LEVELS.length && !earnedBadges.includes(levels[idx - 1].id);
+               
                const isCompleted = earnedBadges.includes(lvl.id);
                
                return (
@@ -335,8 +424,10 @@ const App: React.FC = () => {
                    setCurrentLevelIdx(idx);
                    setCurrentLevel(levels[idx]);
                    setCode([]);
-                   // Update Hash manually if user clicks nav
-                   window.location.hash = `level=${idx + 1}`;
+                   // Clear query params if switching to standard levels
+                   if (isStandard) {
+                       window.location.hash = `level=${idx + 1}`;
+                   }
                  }}
                  className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all relative
                    ${currentLevelIdx === idx ? 'bg-c4k-blue-500 text-white scale-110 shadow-lg' : 
@@ -355,10 +446,10 @@ const App: React.FC = () => {
           <button 
             onClick={handleShare}
             className="flex items-center gap-2 px-4 py-2 text-c4k-slate-600 bg-c4k-slate-100 hover:bg-c4k-slate-200 rounded-lg font-bold transition-colors"
-            title="Share Level Link"
+            title="Get Shareable Link"
           >
             <Share2 size={18} />
-            <span className="hidden sm:inline">{shareBtnText}</span>
+            <span className="hidden sm:inline">Share</span>
           </button>
 
           <button
@@ -403,7 +494,14 @@ const App: React.FC = () => {
 
             {/* Company Logo Watermark - Discreet Bottom Right */}
             <div className="absolute bottom-6 right-6 opacity-60 hover:opacity-100 transition-opacity pointer-events-none select-none z-10">
-              <img src="logo.png" alt="Code 4 Kids" className="h-12 w-auto drop-shadow-sm" />
+              <svg width="200" height="50" viewBox="0 0 200 50" fill="none" xmlns="http://www.w3.org/2000/svg" className="h-10 w-auto drop-shadow-sm">
+                <path d="M10 10H40C42.7614 10 45 12.2386 45 15V35C45 37.7614 42.7614 40 40 40H10C7.23858 40 5 37.7614 5 35V15C5 12.2386 7.23858 10 10 10Z" fill="#3b82f6"/>
+                <path d="M18 18L25 25L18 32" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M32 32L25 25L32 18" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/>
+                <text x="55" y="33" fontFamily="Arial, sans-serif" fontWeight="800" fontSize="24" fill="#1e3a8a" letterSpacing="-0.5">
+                  Code<tspan fill="#84cc16">4</tspan>Kids
+                </text>
+              </svg>
             </div>
 
             {/* Status Overlay */}
@@ -426,7 +524,7 @@ const App: React.FC = () => {
                     ) : (
                       // Levels 1-5: Show Coins corresponding to level count
                       <div className="flex gap-2">
-                         {Array.from({ length: currentLevelIdx + 1 }).map((_, i) => (
+                         {Array.from({ length: Math.min(6, currentLevelIdx + 1) }).map((_, i) => (
                             <div key={i} className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-c4k-blue-500 border-2 border-white shadow-lg animate-in zoom-in duration-500" style={{ animationDelay: `${i * 100}ms` }} />
                          ))}
                       </div>
@@ -451,10 +549,14 @@ const App: React.FC = () => {
                         window.location.hash = 'level=1';
                       } else {
                         const next = currentLevelIdx + 1;
-                        setCurrentLevelIdx(next);
-                        setCurrentLevel(levels[next]);
-                        setCode([]);
-                        window.location.hash = `level=${next + 1}`;
+                        if (next < levels.length) {
+                            setCurrentLevelIdx(next);
+                            setCurrentLevel(levels[next]);
+                            setCode([]);
+                            window.location.hash = `level=${next + 1}`;
+                        } else {
+                           // End of all levels
+                        }
                       }
                     }}
                     className="px-8 py-3 bg-c4k-secondary-green text-white rounded-xl font-bold text-lg hover:bg-green-600 transition-colors flex items-center gap-2 mx-auto"
@@ -531,10 +633,62 @@ const App: React.FC = () => {
         </div>
       </div>
 
+      {/* Share Modal */}
+      {showShareModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6 border-b border-c4k-slate-100 flex items-center justify-between">
+              <h3 className="text-xl font-bold text-c4k-slate-800 flex items-center gap-2">
+                <Share2 size={20} className="text-c4k-blue-500" />
+                Share Level
+              </h3>
+              <button 
+                onClick={() => setShowShareModal(false)}
+                className="text-c4k-slate-400 hover:text-c4k-slate-600 transition-colors"
+              >
+                <X size={24} />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <p className="text-c4k-slate-600">
+                Send this link to anyone. They can play this exact level instantly, no account required.
+              </p>
+              
+              <div className="flex gap-2">
+                <input 
+                  type="text" 
+                  readOnly 
+                  value={generatedLink}
+                  className="flex-1 bg-c4k-slate-50 border border-c4k-slate-300 rounded-lg px-4 py-3 text-sm text-c4k-slate-600 focus:outline-none select-all"
+                  onClick={(e) => e.currentTarget.select()}
+                />
+                <button 
+                  onClick={copyToClipboard}
+                  className="bg-c4k-blue-500 hover:bg-c4k-blue-600 text-white font-bold px-4 py-2 rounded-lg transition-colors flex items-center gap-2 min-w-[120px] justify-center"
+                >
+                  <Copy size={18} />
+                  {copyFeedback}
+                </button>
+              </div>
+
+              {isLocalhost && (
+                <div className="flex items-start gap-3 bg-amber-50 p-4 rounded-lg border border-amber-200 text-amber-800 text-sm">
+                   <AlertTriangle className="shrink-0 mt-0.5" size={16} />
+                   <div>
+                     <strong>You are on localhost.</strong> The link above will only work for you. To share with others, you must deploy this app to the web (e.g., GitHub Pages, Vercel).
+                   </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* AI Modal */}
       {showAiModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
             <div className="bg-gradient-to-r from-c4k-secondary-purple to-c4k-secondary-pink p-6">
               <h3 className="text-2xl font-bold text-white flex items-center gap-2">
                 <Sparkles />

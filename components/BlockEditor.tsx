@@ -3,6 +3,20 @@ import { BlockType, CodeBlock, GameStatus } from '../types';
 import { COLORS } from '../constants';
 import { ArrowUp, ArrowLeft, ArrowRight, Upload, Play, RefreshCw, Trash2, Plus } from 'lucide-react';
 
+// Fix for Missing JSX Intrinsic Elements in TypeScript
+declare global {
+  namespace JSX {
+    interface IntrinsicElements {
+      div: any;
+      button: any;
+      span: any;
+      h2: any;
+      h3: any;
+      p: any;
+    }
+  }
+}
+
 interface BlockEditorProps {
   code: CodeBlock[];
   setCode: (code: CodeBlock[]) => void;
