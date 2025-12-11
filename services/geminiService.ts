@@ -1,26 +1,36 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 import { LevelData } from "../types";
 
-export const generateLevel = async (prompt: string): Promise<LevelData | null> => {
-  try {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Create a single client instance
+const genAI = new GoogleGenerativeAI(process.env.API_KEY as string);
 
+export const generateLevel = async (
+  prompt: string
+): Promise<LevelData | null> => {
+  try {
     // Schema for strict JSON output
     const responseSchema = {
-      type: Type.OBJECT,
+      type: SchemaType.OBJECT,
       properties: {
-        name: { type: Type.STRING, description: "A creative name for the level" },
-        description: { type: Type.STRING, description: "Short hint or description" },
+        name: { type: SchemaType.STRING, description: "A creative name for the level" },
+        description: { type: SchemaType.STRING, description: "Short hint or description" },
         grid: {
-          type: Type.ARRAY,
-          description: "2D array representing the map. 0=Empty(Void), 1=Path, 2=Start, 3=Goal. The path must be contiguous.",
+          type: SchemaType.ARRAY,
+          description:
+            "2D array representing the map. 0=Empty(Void), 1=Path, 2=Start, 3=Goal. The path must be contiguous.",
           items: {
-            type: Type.ARRAY,
-            items: { type: Type.INTEGER }
+            type: SchemaType.ARRAY,
+            items: { type: SchemaType.INTEGER }
           }
         },
-        startDir: { type: Type.INTEGER, description: "0: North, 1: East, 2: South, 3: West" },
-        par: { type: Type.INTEGER, description: "Expected number of blocks to solve" }
+        startDir: {
+          type: SchemaType.INTEGER,
+          description: "0: North, 1: East, 2: South, 3: West"
+        },
+        par: {
+          type: SchemaType.INTEGER,
+          description: "Expected number of blocks to solve"
+        }
       },
       required: ["name", "description", "grid", "startDir", "par"]
     };
@@ -36,26 +46,30 @@ export const generateLevel = async (prompt: string): Promise<LevelData | null> =
       The grid size should be between 5x5 and 10x10.
     `;
 
-    const response = await ai.models.generateContent({
+    const model = genAI.getGenerativeModel({
       model: "gemini-2.5-flash",
-      contents: `Generate a level with this request: ${prompt}`,
-      config: {
-        systemInstruction,
+      generationConfig: {
         responseMimeType: "application/json",
-        responseSchema: responseSchema as any, // Cast to any to avoid minor type mismatches with Schema definition
-        temperature: 1, // Creativity allowed
+        responseSchema,
+        temperature: 1
       }
     });
 
-    if (response.text) {
-      const data = JSON.parse(response.text);
-      return {
-        ...data,
-        id: `gen-${Date.now()}`
-      };
-    }
-    return null;
+    const result = await model.generateContent(
+      `${systemInstruction}\n\nGenerate a level with this request: ${prompt}`
+    );
 
+    const text = result.response.text();
+    if (!text) {
+      return null;
+    }
+
+    const data = JSON.parse(text);
+
+    return {
+      ...data,
+      id: `gen-${Date.now()}`
+    } as LevelData;
   } catch (error) {
     console.error("Gemini Level Gen Error:", error);
     throw error;
