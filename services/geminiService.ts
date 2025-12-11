@@ -1,4 +1,4 @@
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { LevelData } from "../types";
 
 export const generateLevel = async (prompt: string): Promise<LevelData | null> => {
